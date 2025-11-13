@@ -1,0 +1,123 @@
+local socket = require("socket")
+
+-- Intentar conexión con el script funcional
+local client = socket.tcp()
+client:settimeout(0)
+client:connect("127.0.0.1", 8080)
+
+-- Datos del menú
+local menu = {
+    x = 100, y = 100,
+    w = 360, h = 220,
+    dragging = false,
+    ox = 0, oy = 0,
+    visible = true
+}
+
+local boton = {x = 140, y = 120, w = 180, h = 40, activo = false}
+local minimizar = {x = 0, y = 0, w = 20, h = 20}
+local cerrar = {x = 0, y = 0, w = 20, h = 20}
+
+local fuente
+
+function love.load()
+    love.window.setTitle("Panel Externo Lua")
+    love.window.setMode(540, 380, {resizable = false})
+    fuente = love.graphics.newFont(16)
+end
+
+function love.update(dt)
+    if menu.dragging then
+        local mx, my = love.mouse.getPosition()
+        menu.x = mx - menu.ox
+        menu.y = my - menu.oy
+    end
+
+    minimizar.x = menu.x + menu.w - 60
+    minimizar.y = menu.y + 6
+    cerrar.x = menu.x + menu.w - 30
+    cerrar.y = menu.y + 6
+end
+
+function love.mousepressed(x, y, button)
+    if button ~= 1 then return end
+
+    -- Arrastrar ventana
+    if y > menu.y and y < menu.y + 30 and x > menu.x and x < menu.x + menu.w then
+        menu.dragging = true
+        menu.ox = x - menu.x
+        menu.oy = y - menu.y
+    end
+
+    -- Cerrar
+    if x > cerrar.x and x < cerrar.x + cerrar.w and y > cerrar.y and y < cerrar.y + cerrar.h then
+        love.event.quit()
+    end
+
+    -- Minimizar
+    if x > minimizar.x and x < minimizar.x + minimizar.w and y > minimizar.y and y < minimizar.y + minimizar.h then
+        menu.visible = not menu.visible
+    end
+
+    if not menu.visible then return end
+
+    -- Botón principal
+    if x > boton.x and x < boton.x + boton.w and y > boton.y and y < boton.y + boton.h then
+        boton.activo = not boton.activo
+        if boton.activo then
+            client:send("ACTIVAR\n")
+        else
+            client:send("DETENER\n")
+        end
+    end
+end
+
+function love.mousereleased(_, _, button)
+    if button == 1 then
+        menu.dragging = false
+    end
+end
+
+function love.draw()
+    if not menu.visible then
+        love.graphics.setColor(1, 1, 1, 0.3)
+        love.graphics.print("🔹 Ventana minimizada - click para restaurar", 150, 180)
+        return
+    end
+
+    love.graphics.setFont(fuente)
+
+    -- Fondo translúcido (efecto vidrio)
+    love.graphics.setColor(0, 1, 1, 0.25)
+    love.graphics.rectangle("fill", menu.x, menu.y, menu.w, menu.h, 22, 22)
+
+    -- Borde luminoso
+    love.graphics.setColor(0, 0.8, 1, 0.4)
+    love.graphics.setLineWidth(2)
+    love.graphics.rectangle("line", menu.x, menu.y, menu.w, menu.h, 22, 22)
+
+    -- Barra superior
+    love.graphics.setColor(0, 0.7, 1, 0.9)
+    love.graphics.rectangle("fill", menu.x, menu.y, menu.w, 30, 22, 22)
+
+    -- Título
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.print("✨ Menú Externo Lua", menu.x + 10, menu.y + 7)
+
+    -- Botones minimizar / cerrar
+    love.graphics.setColor(1, 1, 0)
+    love.graphics.circle("fill", minimizar.x + 10, minimizar.y + 10, 7)
+    love.graphics.setColor(1, 0.3, 0.3)
+    love.graphics.circle("fill", cerrar.x + 10, cerrar.y + 10, 7)
+
+    -- Botón central
+    if boton.activo then
+        love.graphics.setColor(0, 0.9, 0.6, 1)
+    else
+        love.graphics.setColor(0, 0.8, 1, 1)
+    end
+    love.graphics.rectangle("fill", boton.x, boton.y, boton.w, boton.h, 12, 12)
+
+    love.graphics.setColor(1, 1, 1)
+    love.graphics.printf(boton.activo and "DESACTIVAR" or "ACTIVAR", boton.x, boton.y + 12, boton.w, "center")
+end
