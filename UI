@@ -1,40 +1,157 @@
--- Mini UI Hub (FIXED - Functional)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local RunService = game:GetService("RunService")
+
 local Player = Players.LocalPlayer
 
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "MiniUIHub"
 screenGui.ResetOnSpawn = false
-screenGui.Parent = Player:WaitForChild("PlayerGui")
+screenGui.Parent = gethui and gethui() or Player:WaitForChild("PlayerGui")
 
--- HSV → RGB
 local function HSV(h,s,v)
 	return Color3.fromHSV(h%1,s,v)
 end
 
--- CREATE WINDOW
-function createMiniWindow(title, posX, contentHeight)
-	contentHeight = contentHeight or 120
+local Library = {}
 
+function Library:CreateWindow(title, posX)
 	local frame = Instance.new("Frame")
 	frame.Size = UDim2.new(0,200,0,40)
-	frame.Position = UDim2.new(0,posX,0,60)
+	frame.Position = UDim2.new(0,posX,0,50)
 	frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
 	frame.BorderSizePixel = 0
 	frame.ClipsDescendants = true
 	frame.Parent = screenGui
 
-	Instance.new("UICorner",frame).CornerRadius = UDim.new(0,10)
+	Instance.new("UICorner", frame).CornerRadius = UDim.new(0,10)
 
-	-- HEADER
-	local header = Instance.new("Frame",frame)
+	local header = Instance.new("Frame", frame)
 	header.Size = UDim2.new(1,0,0,40)
 	header.BackgroundTransparency = 1
 
-	local line = Instance.new("Frame",header)
+	local line = Instance.new("Frame", header)
+	line.Size = UDim2.new(1,-20,0,2)
+	line.Position = UDim2.new(0,10,0,5)
+	line.BorderSizePixel = 0
+
+	task.spawn(function()
+		local h = 0
+		while true do
+			h += 0.005
+			line.BackgroundColor3 = HSV(h,1,1)
+			RunService.RenderStepped:Wait()
+		end
+	end)
+
+	local titleLabel = Instance.new("TextLabel", header)
+	titleLabel.Size = UDim2.new(1,-40,0,20)
+	titleLabel.Position = UDim2.new(0,10,0,15)
+	titleLabel.Text = title
+	titleLabel.TextColor3 = Color3.new(1,1,1)
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.Font = Enum.Font.GothamSemibold
+	titleLabel.TextSize = 14
+	titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+	local toggleBtn = Instance.new("TextButton", header)
+	toggleBtn.Size = UDim2.new(0,25,0,25)
+	toggleBtn.Position = UDim2.new(1,-35,0,7)
+	toggleBtn.Text = "-"
+	toggleBtn.BackgroundTransparency = 1
+	toggleBtn.TextColor3 = Color3.new(1,1,1)
+	toggleBtn.Font = Enum.Font.GothamBold
+
+	local content = Instance.new("Frame", frame)
+	content.Position = UDim2.new(0,0,0,40)
+	content.Size = UDim2.new(1,0,0,0)
+	content.BackgroundColor3 = Color3.fromRGB(30,30,30)
+
+	local padding = Instance.new("UIPadding", content)
+	padding.PaddingLeft = UDim.new(0,8)
+	padding.PaddingTop = UDim.new(0,8)
+
+	local layout = Instance.new("UIListLayout", content)
+	layout.Padding = UDim.new(0,6)
+
+	local open = true
+
+	local function resize()
+		if open then
+			frame.Size = UDim2.new(0,200,0,40 + layout.AbsoluteContentSize.Y + 16)
+		end
+	end
+
+	layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(resize)
+
+	toggleBtn.MouseButton1Click:Connect(function()
+		open = not open
+		content.Visible = open
+		toggleBtn.Text = open and "-" or "+"
+		TweenService:Create(frame,TweenInfo.new(0.25),{
+			Size = UDim2.new(0,200,0,open and (40 + layout.AbsoluteContentSize.Y + 16) or 40)
+		}):Play()
+	end)
+
+	local window = {}
+
+	function window:AddText(text)
+		local l = Instance.new("TextLabel", content)
+		l.Size = UDim2.new(1,0,0,20)
+		l.Text = text
+		l.TextColor3 = Color3.new(1,1,1)
+		l.BackgroundTransparency = 1
+		l.Font = Enum.Font.Gotham
+		l.TextSize = 13
+		l.TextXAlignment = Enum.TextXAlignment.Left
+	end
+
+	function window:AddToggle(text, callback)
+		local b = Instance.new("TextButton", content)
+		b.Size = UDim2.new(1,0,0,25)
+		b.Text = text.." : OFF"
+		b.BackgroundTransparency = 1
+		b.TextColor3 = Color3.fromRGB(255,0,0)
+		b.Font = Enum.Font.GothamBold
+		b.TextSize = 13
+
+		local state = false
+		b.MouseButton1Click:Connect(function()
+			state = not state
+			b.Text = text.." : "..(state and "ON" or "OFF")
+			b.TextColor3 = state and Color3.fromRGB(0,255,0) or Color3.fromRGB(255,0,0)
+			callback(state)
+		end)
+	end
+
+	function window:AddBox(placeholder, callback)
+		local box = Instance.new("TextBox", content)
+		box.Size = UDim2.new(1,0,0,25)
+		box.PlaceholderText = placeholder
+		box.Text = ""
+		box.TextColor3 = Color3.new(1,1,1)
+		box.BackgroundColor3 = Color3.fromRGB(20,20,20)
+		box.Font = Enum.Font.Gotham
+		box.TextSize = 13
+
+		box.FocusLost:Connect(function(focus)
+			callback(box, focus)
+		end)
+	end
+
+	function window:AddDropdown(text, list, callback)
+		for _,v in ipairs(list) do
+			self:AddToggle(v,function()
+				callback(v)
+			end)
+		end
+	end
+
+	return window
+end
+
+return Library	local line = Instance.new("Frame",header)
 	line.Size = UDim2.new(1,-20,0,2)
 	line.Position = UDim2.new(0,10,0.15,0)
 	line.BorderSizePixel = 0
