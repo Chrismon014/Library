@@ -1,0 +1,176 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+
+local screenGui = Instance.new("ScreenGui")
+screenGui.Parent = Player:WaitForChild("PlayerGui")
+screenGui.Name = "MiniUIHub"
+
+-- Función para convertir HSV a RGB (para arcoiris)
+local function HSV(h,s,v)
+    return Color3.fromHSV(h%1,s,v)
+end
+
+local function createMiniWindow(title, posX, contentHeight)
+    contentHeight = contentHeight or 100
+
+    -- FRAME PRINCIPAL
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 200, 0, 40)
+    frame.Position = UDim2.new(0, posX, 0, 50)
+    frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+    frame.BorderSizePixel = 0
+    frame.ClipsDescendants = true
+    frame.Parent = screenGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0,10)
+    corner.Parent = frame
+
+    -- HEADER
+    local header = Instance.new("Frame")
+    header.Size = UDim2.new(1,0,0,40)
+    header.Position = UDim2.new(0,0,0,0)
+    header.BackgroundTransparency = 1
+    header.Parent = frame
+
+    local line = Instance.new("Frame")
+    line.Size = UDim2.new(1, -20, 0, 2)
+    line.Position = UDim2.new(0, 10, 0.125, 0)
+    line.BackgroundColor3 = Color3.fromRGB(255,255,255) -- color inicial
+    line.BorderSizePixel = 0
+    line.Parent = header
+
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, -40, 0, 18)
+    titleLabel.Position = UDim2.new(0, 10, 0.25, 0)
+    titleLabel.Text = title
+    titleLabel.TextColor3 = Color3.fromRGB(255,255,255)
+    titleLabel.BackgroundTransparency = 1
+    titleLabel.TextScaled = false
+    titleLabel.Font = Enum.Font.GothamSemibold
+    titleLabel.TextSize = 14
+    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+    titleLabel.Parent = header
+
+    -- BOTÓN + / -
+    local toggleBtn = Instance.new("TextButton")
+    toggleBtn.Size = UDim2.new(0, 25, 0, 25)
+    toggleBtn.Position = UDim2.new(1, -35, 0.25, 0)
+    toggleBtn.Text = "+"
+    toggleBtn.BackgroundTransparency = 1 -- fondo transparente
+    toggleBtn.TextColor3 = Color3.fromRGB(255,255,255)
+    toggleBtn.BorderSizePixel = 0
+    toggleBtn.Font = Enum.Font.GothamBold
+    toggleBtn.TextScaled = true
+    toggleBtn.Parent = header
+
+    -- CONTENT
+    local content = Instance.new("Frame")
+    content.Size = UDim2.new(1,0,0,contentHeight)
+    content.Position = UDim2.new(0,0,0,40)
+    content.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    content.Parent = frame
+
+    -- FUNCION MAXIMIZAR/MINIMIZAR
+    local contentVisible = true
+    toggleBtn.MouseButton1Click:Connect(function()
+        contentVisible = not contentVisible
+        toggleBtn.Text = contentVisible and "-" or "+"
+        local newHeight = contentVisible and (40 + contentHeight) or 40
+        content.Visible = contentVisible
+        TweenService:Create(frame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = UDim2.new(0,200,0,newHeight)}):Play()
+    end)
+
+    -- ARRASTRABLE
+    local dragging = false
+    local dragInput
+    local startPos
+    local startPosFrame
+
+    frame.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            startPos = input.Position
+            startPosFrame = frame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    frame.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - startPos
+            frame.Position = UDim2.new(
+                startPosFrame.X.Scale,
+                startPosFrame.X.Offset + delta.X,
+                startPosFrame.Y.Scale,
+                startPosFrame.Y.Offset + delta.Y
+            )
+        end
+    end)
+
+    -- EFECTO ARCOIRIS PARA LINEA
+    spawn(function()
+        local hue = 0
+        while true do
+            hue = hue + 0.005
+            line.BackgroundColor3 = HSV(hue,1,1)
+            RunService.RenderStepped:Wait()
+        end
+    end)
+
+    -- CONTENIDO INTERACTIVO
+    local options = {"Auto", "Farm"}
+    for i, name in ipairs(options) do
+        local label = Instance.new("TextLabel")
+        label.Size = UDim2.new(0.5, -10, 0, 25)
+        label.Position = UDim2.new(0, 10, 0, 5 + (i-1)*30)
+        label.BackgroundTransparency = 1
+        label.Text = name
+        label.TextColor3 = Color3.fromRGB(255,255,255)
+        label.Font = Enum.Font.GothamSemibold
+        label.TextSize = 14
+        label.TextXAlignment = Enum.TextXAlignment.Left
+        label.Parent = content
+
+        local status = Instance.new("TextButton")
+        status.Size = UDim2.new(0.3, 0, 0, 25)
+        status.Position = UDim2.new(0.65, 0, 0, 5 + (i-1)*30)
+        status.Text = "OFF"
+        status.TextColor3 = Color3.fromRGB(255,0,0)
+        status.Font = Enum.Font.GothamBold
+        status.TextSize = 14
+        status.BackgroundTransparency = 1 -- fondo transparente
+        status.BorderSizePixel = 0
+        status.Parent = content
+
+        status.MouseButton1Click:Connect(function()
+            if status.Text == "OFF" then
+                status.Text = "ON"
+                status.TextColor3 = Color3.fromRGB(0,255,0)
+            else
+                status.Text = "OFF"
+                status.TextColor3 = Color3.fromRGB(255,0,0)
+            end
+        end)
+    end
+
+    return content
+end
+
+-- EJEMPLOS
+local win1 = createMiniWindow("Auto Farm", 50, 80)
+local win2 = createMiniWindow("Auto Delivery", 300, 100)
+local win3 = createMiniWindow("Config", 550, 60)
