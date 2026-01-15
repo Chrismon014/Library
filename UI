@@ -1,3 +1,4 @@
+-- Mini UI Hub (FIXED - Functional)
 local Players = game:GetService("Players")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
@@ -5,36 +6,169 @@ local RunService = game:GetService("RunService")
 local Player = Players.LocalPlayer
 
 local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = Player:WaitForChild("PlayerGui")
 screenGui.Name = "MiniUIHub"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = Player:WaitForChild("PlayerGui")
 
--- HSV
+-- HSV → RGB
 local function HSV(h,s,v)
-    return Color3.fromHSV(h%1,s,v)
+	return Color3.fromHSV(h%1,s,v)
 end
 
---==================================================
--- CREATE MINI WINDOW
---==================================================
-
+-- CREATE WINDOW
 function createMiniWindow(title, posX, contentHeight)
-    contentHeight = contentHeight or 100
+	contentHeight = contentHeight or 120
 
-    -- FRAME
-    local frame = Instance.new("Frame")
-    frame.Size = UDim2.new(0, 200, 0, 40 + contentHeight)
-    frame.Position = UDim2.new(0, posX, 0, 50)
-    frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
-    frame.BorderSizePixel = 0
-    frame.ClipsDescendants = true
-    frame.Parent = screenGui
+	local frame = Instance.new("Frame")
+	frame.Size = UDim2.new(0,200,0,40)
+	frame.Position = UDim2.new(0,posX,0,60)
+	frame.BackgroundColor3 = Color3.fromRGB(0,0,0)
+	frame.BorderSizePixel = 0
+	frame.ClipsDescendants = true
+	frame.Parent = screenGui
 
-    local corner = Instance.new("UICorner", frame)
-    corner.CornerRadius = UDim.new(0,10)
+	Instance.new("UICorner",frame).CornerRadius = UDim.new(0,10)
 
-    -- HEADER
-    local header = Instance.new("Frame", frame)
-    header.Size = UDim2.new(1,0,0,40)
+	-- HEADER
+	local header = Instance.new("Frame",frame)
+	header.Size = UDim2.new(1,0,0,40)
+	header.BackgroundTransparency = 1
+
+	local line = Instance.new("Frame",header)
+	line.Size = UDim2.new(1,-20,0,2)
+	line.Position = UDim2.new(0,10,0.15,0)
+	line.BorderSizePixel = 0
+
+	local titleLabel = Instance.new("TextLabel",header)
+	titleLabel.Size = UDim2.new(1,-40,0,18)
+	titleLabel.Position = UDim2.new(0,10,0.35,0)
+	titleLabel.Text = title
+	titleLabel.BackgroundTransparency = 1
+	titleLabel.TextColor3 = Color3.new(1,1,1)
+	titleLabel.Font = Enum.Font.GothamSemibold
+	titleLabel.TextSize = 14
+	titleLabel.TextXAlignment = Left
+
+	local toggleBtn = Instance.new("TextButton",header)
+	toggleBtn.Size = UDim2.new(0,25,0,25)
+	toggleBtn.Position = UDim2.new(1,-35,0.25,0)
+	toggleBtn.Text = "-"
+	toggleBtn.BackgroundTransparency = 1
+	toggleBtn.TextColor3 = Color3.new(1,1,1)
+	toggleBtn.Font = Enum.Font.GothamBold
+	toggleBtn.TextScaled = true
+
+	-- CONTENT
+	local content = Instance.new("Frame",frame)
+	content.Size = UDim2.new(1,0,0,contentHeight)
+	content.Position = UDim2.new(0,0,0,40)
+	content.BackgroundColor3 = Color3.fromRGB(30,30,30)
+
+	local layout = Instance.new("UIListLayout",content)
+	layout.Padding = UDim.new(0,6)
+
+	-- MINIMIZE
+	local open = true
+	toggleBtn.MouseButton1Click:Connect(function()
+		open = not open
+		toggleBtn.Text = open and "-" or "+"
+		content.Visible = open
+		TweenService:Create(
+			frame,
+			TweenInfo.new(0.25,Enum.EasingStyle.Quad),
+			{Size = UDim2.new(0,200,0,open and (40+contentHeight) or 40)}
+		):Play()
+	end)
+
+	-- DRAG
+	local dragging, dragStart, startPos
+	frame.InputBegan:Connect(function(i)
+		if i.UserInputType == Enum.UserInputType.MouseButton1 then
+			dragging = true
+			dragStart = i.Position
+			startPos = frame.Position
+			i.Changed:Connect(function()
+				if i.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end)
+		end
+	end)
+
+	UserInputService.InputChanged:Connect(function(i)
+		if dragging and i.UserInputType == Enum.UserInputType.MouseMovement then
+			local delta = i.Position - dragStart
+			frame.Position = UDim2.new(
+				startPos.X.Scale,
+				startPos.X.Offset + delta.X,
+				startPos.Y.Scale,
+				startPos.Y.Offset + delta.Y
+			)
+		end
+	end)
+
+	-- RAINBOW LINE
+	task.spawn(function()
+		local h = 0
+		while frame.Parent do
+			h += 0.005
+			line.BackgroundColor3 = HSV(h,1,1)
+			RunService.RenderStepped:Wait()
+		end
+	end)
+
+	-- WINDOW API
+	local window = {}
+
+	function window:AddLabel(text)
+		local lbl = Instance.new("TextLabel",content)
+		lbl.Size = UDim2.new(1,-10,0,22)
+		lbl.BackgroundTransparency = 1
+		lbl.Text = text
+		lbl.TextColor3 = Color3.new(1,1,1)
+		lbl.Font = Enum.Font.Gotham
+		lbl.TextSize = 13
+		lbl.TextXAlignment = Left
+	end
+
+	function window:AddToggle(text, callback)
+		local btn = Instance.new("TextButton",content)
+		btn.Size = UDim2.new(1,-10,0,26)
+		btn.BackgroundTransparency = 1
+		btn.Text = "[ OFF ]  "..text
+		btn.TextColor3 = Color3.fromRGB(255,80,80)
+		btn.Font = Enum.Font.GothamBold
+		btn.TextSize = 13
+
+		local state = false
+		btn.MouseButton1Click:Connect(function()
+			state = not state
+			btn.Text = (state and "[ ON ]  " or "[ OFF ]  ")..text
+			btn.TextColor3 = state and Color3.fromRGB(80,255,80) or Color3.fromRGB(255,80,80)
+			pcall(callback,state)
+		end)
+	end
+
+	function window:AddBox(text, callback)
+		local box = Instance.new("TextBox",content)
+		box.Size = UDim2.new(1,-10,0,26)
+		box.PlaceholderText = text
+		box.Text = ""
+		box.BackgroundColor3 = Color3.fromRGB(20,20,20)
+		box.TextColor3 = Color3.new(1,1,1)
+		box.Font = Enum.Font.Gotham
+		box.TextSize = 13
+		Instance.new("UICorner",box).CornerRadius = UDim.new(0,6)
+
+		box.FocusLost:Connect(function(enter)
+			if enter then
+				pcall(callback,box,true)
+			end
+		end)
+	end
+
+	return window
+end    header.Size = UDim2.new(1,0,0,40)
     header.BackgroundTransparency = 1
 
     local line = Instance.new("Frame", header)
