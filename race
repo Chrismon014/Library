@@ -1,0 +1,288 @@
+-- Cargar WindUI con manejo de errores
+local success, WindUI = pcall(function()
+    return loadstring(game:HttpGet("https://tree-hub.vercel.app/api/UI/WindUI"))()
+end)
+
+if not success or not WindUI then
+    WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua"))()
+end
+
+-- Servicios
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
+
+-- Variables de Estado
+local eventRunning = false
+local estadoActualUI = "Esperando inicio..."
+
+-- Lista de las 10 líneas de salida (Z coordinates)
+local carrilesLineas = {-4129, -4144, -4157, -4171, -4185, -4200, -4214, -4230, -4243, -4257}
+
+-- Función para detectar en qué línea está el jugador según su Z
+local function detectarLineaActual(posZ)
+    local mejorLinea = carrilesLineas[1]
+    local menorDiff = math.abs(posZ - carrilesLineas[1])
+    for _, zVal in ipairs(carrilesLineas) do
+        local diff = math.abs(posZ - zVal)
+        if diff < menorDiff then
+            menorDiff = diff
+            mejorLinea = zVal
+        end
+    end
+    return mejorLinea
+end
+
+-- Función para leer los letreros reales de la pantalla (RACE LIVE o NEXT RACE / RACE OVER)
+local function leerEstadoCarreraReal()
+    local playerGui = LocalPlayer:FindFirstChild("PlayerGui")
+    if not playerGui then return "Desconocido", false end
+    
+    local esLive = false
+    local textoEncontrado = "En espera de intervalo"
+
+    for _, descendant in ipairs(playerGui:GetDescendants()) do
+        if descendant:IsA("TextLabel") or descendant:IsA("TextButton") then
+            local texto = descendant.Text:upper()
+            if string.find(texto, "RACE LIVE") then
+                esLive = true
+                textoEncontrado = "RACE LIVE (Carrera Activa)"
+            elseif string.find(texto, "NEXT RACE") or string.find(texto, "RACE OVER") then
+                esLive = false
+                textoEncontrado = "Tiempo de descanso / Intervalo"
+            end
+        end
+    end
+    
+    estadoActualUI = textoEncontrado
+    return textoEncontrado, esLive
+end
+
+-- Función estricta para caminar respetando siempre el carril Z exacto
+local function caminarEstricto(targetX, targetZ, tiempoMaximo)
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not rootPart then return false end
+    
+    local startTime = tick()
+    repeat
+        task.wait(0.05)
+        if not eventRunning then return false end
+        humanoid:MoveTo(Vector3.new(targetX, rootPart.Position.Y, targetZ))
+    until (Vector3.new(rootPart.Position.X, 0, rootPart.Position.Z) - Vector3.new(targetX, 0, targetZ)).Magnitude < 3 or (tick() - startTime) > (tiempoMaximo or 15)
+    
+    return true
+end
+
+-- Ciclo Completo del Evento
+local function ejecutarCicloEvento()
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    
+    if not humanoid or not rootPart then return end
+
+    -- 0. Ir a la posición inicial (-12626, 6, -4152)
+    humanoid.WalkSpeed = 16
+    if not caminarEstricto(-12626, -4152, 12) then return end
+    if not eventRunning then return end
+
+    -- 1. Ir al punto base de transición (-12902, 6, -4165)
+    if not caminarEstricto(-12902, -4165, 10) then return end
+    if not eventRunning then return end
+
+    -- 2. Detectar carril exacto e ir a la línea de salida (-13801, 6, Z_Carril)
+    local carrilDetectado = detectarLineaActual(rootPart.Position.Z)
+    if not caminarEstricto(-13801, carrilDetectado, 12) then return end
+    if not eventRunning then return end
+
+    -- 3. ESPERAR A QUE SEA "RACE LIVE"
+    print("[Event Race] Esperando que inicie RACE LIVE...")
+    while eventRunning do
+        _, estaEnLive = leerEstadoCarreraReal()
+        if estaEnLive then break end
+        task.wait(2)
+    end
+
+    if not eventRunning then return end
+
+    -- Espera reglamentaria de 11 segundos al arrancar la carrera en vivo
+    print("[Event Race] ¡RACE LIVE detectado! Esperando 11 segundos de salida...")
+    local tiempoEsperaInicio = tick()
+    while (tick() - tiempoEsperaInicio) < 11 do
+        if not eventRunning then humanoid.WalkSpeed = 16; return end
+        task.wait(0.2)
+    end
+
+    local inicioCarreraTick = tick()
+
+    -- 4. STAGE 1: Correr directo sin frenar hasta la posición exacta X = -13369 manteniendo el carril Z
+    print("[Event Race] Corriendo stage 1 hacia X = -13369 en el carril Z: " .. carrilDetectado)
+    humanoid.WalkSpeed = 24
+    
+    local startTimeStage1 = tick()
+    repeat
+        task.wait(0.05)
+        if not eventRunning then humanoid.WalkSpeed = 16; return end
+        humanoid:MoveTo(Vector3.new(-13369, rootPart.Position.Y, carrilDetectado))
+    until rootPart.Position.X <= -13369 or (tick() - startTimeStage1) > 12
+
+    if not eventRunning then humanoid.WalkSpeed = 16; return end
+
+    -- 5. Zona del objeto y arrastre (Pausa corta para asegurar que agarre la pesa)
+    print("[Event Race] Objeto alcanzado en -13369. Agarrando...")
+    task.wait(0.5)
+    if not eventRunning then humanoid.WalkSpeed = 16; return end
+
+    -- 6. Zona de Repeticiones de Pesas (-13885, 6, Z_Carril)
+    print("[Event Race] Yendo a la zona de pesas (-13885, 6, " .. carrilDetectado .. ")...")
+    humanoid.WalkSpeed = 18
+    if not caminarEstricto(-13885, carrilDetectado, 8) then return end
+    if not eventRunning then humanoid.WalkSpeed = 16; return end
+
+    humanoid.WalkSpeed = 16
+    print("[Event Race] Haciendo repeticiones de pesas...")
+    for i = 1, 35 do
+        if not eventRunning then break end
+        VirtualUser:Button1Down(Vector2.new(0,0))
+        task.wait(0.05)
+        VirtualUser:Button1Up(Vector2.new(0,0))
+        task.wait(0.15)
+    end
+    if not eventRunning then return end
+
+    -- 7. Luchador de fuercitas (-13963, 6, Z_Carril)
+    print("[Event Race] Caminando al luchador de fuercitas (-13963, 6, " .. carrilDetectado .. ")...")
+    humanoid.WalkSpeed = 22
+    if not caminarEstricto(-13963, carrilDetectado, 8) then return end
+
+    print("[Event Race] Esperando 2 segundos para iniciar fuercitas...")
+    task.wait(2.0)
+    if not eventRunning then humanoid.WalkSpeed = 16; return end
+
+    print("[Event Race] Dando clics super rápidos en fuercitas...")
+    for i = 1, 60 do
+        if not eventRunning then break end
+        VirtualUser:Button1Down(Vector2.new(0,0))
+        task.wait(0.01)
+        VirtualUser:Button1Up(Vector2.new(0,0))
+        task.wait(0.02)
+    end
+    if not eventRunning then return end
+
+    -- 8. Sprint final hacia la meta en (-14549, 6, Z_Carril)
+    print("[Event Race] ¡Sprint final hacia la meta en (-14549, 6, " .. carrilDetectado .. ")!")
+    humanoid.WalkSpeed = 30
+    if not caminarEstricto(-14549, carrilDetectado, 10) then return end
+
+    humanoid.WalkSpeed = 16
+    print("[Event Race] ¡Circuito completado con éxito! Esperando teletransporte...")
+
+    -- Monitoreo de seguridad de 4 minutos y 30 segundos por si se buguea
+    while eventRunning do
+        if (tick() - inicioCarreraTick) > 270 then
+            print("[Event Race] ¡Alerta! La carrera tardó más de 4m 30s. Aplicando TP forzoso de emergencia...")
+            pcall(function()
+                rootPart.CFrame = CFrame.new(-13640, 6, -4197)
+            end)
+            break
+        end
+        local _, liveCheck = leerEstadoCarreraReal()
+        if not liveCheck then break end
+        task.wait(1)
+    end
+end
+
+-- ==========================================
+-- INTERFAZ WINDUI (Con posición fija y centrada)
+-- ==========================================
+
+local Window = WindUI:CreateWindow({
+    Title = "Muscle Legends | Event Race",
+    Icon = "rbxassetid://6023426915",
+    Author = "ParceTech",
+    Folder = "MuscleEventConfig",
+    Size = UDim2.fromOffset(480, 320),
+    Position = UDim2.new(0.5, -240, 0.5, -160),
+    Transparent = false,
+    Theme = "Dark"
+})
+
+local TabFarm = Window:Tab({
+    Title = "Farm Evento",
+    Icon = "activity"
+})
+
+-- Etiqueta para mostrar el estado real (RACE LIVE o Descanso) debajo del botón
+local LabelStatus = TabFarm:Paragraph({
+    Title = "Estado del Evento / Tiempo Real",
+    Content = "Sincronizando reloj..."
+})
+
+TabFarm:Toggle({
+    Title = "Even race",
+    Description = "Automatización con ciclos de 10 min (Live) y carril estricto Z.",
+    Default = false,
+    Callback = function(state)
+        eventRunning = state
+        if eventRunning then
+            task.spawn(function()
+                while eventRunning do
+                    ejecutarCicloEvento()
+                    task.wait(1)
+                end
+            end)
+        else
+            local char = LocalPlayer.Character
+            if char and char:FindFirstChildOfClass("Humanoid") then
+                char:FindFirstChildOfClass("Humanoid").WalkSpeed = 16
+            end
+        end
+    end
+})
+
+-- Hilo en segundo plano para actualizar en tiempo real el texto del estado en la UI
+task.spawn(function()
+    while true do
+        pcall(function()
+            leerEstadoCarreraReal()
+            if LabelStatus then
+                LabelStatus:SetDesc("Estado actual: " .. estadoActualUI)
+            end
+        end)
+        task.wait(1)
+    end
+end)
+
+-- ==========================================
+-- BOTÓN FLOTANTE PARA REABRIR LA INTERFAZ
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+local ToggleBtn = Instance.new("TextButton")
+local UICorner = Instance.new("UICorner")
+
+ScreenGui.Name = "ParceTechUI_Toggle"
+ScreenGui.Parent = CoreGui or LocalPlayer:WaitForChild("PlayerGui")
+ScreenGui.ResetOnSpawn = false
+
+ToggleBtn.Name = "OpenButton"
+ToggleBtn.Parent = ScreenGui
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+ToggleBtn.Position = UDim2.new(0, 15, 0.15, 0)
+ToggleBtn.Size = UDim2.new(0, 90, 0, 35)
+ToggleBtn.Font = Enum.Font.SourceSansBold
+ToggleBtn.Text = "⚡ Abrir UI"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleBtn.TextSize = 14.0
+ToggleBtn.Active = true
+ToggleBtn.Draggable = true
+
+UICorner.CornerRadius = UDim.new(0, 8)
+UICorner.Parent = ToggleBtn
+
+ToggleBtn.MouseButton1Click:Connect(function()
+    Window:Open()
+end)
